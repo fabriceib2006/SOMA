@@ -48,7 +48,7 @@ How else can I assist you with your modules, topic mastery, or schedule today?`
 How can I help you with your studies today?`
           };
         }
-        const isTransient = err?.status === 503 || err?.status === 429 || errStr.includes('high demand') || errStr.includes('UNAVAILABLE') || errStr.includes('quota');
+        const isTransient = err?.status === 503 || err?.status === 429 || errStr.includes('high demand') || errStr.includes('UNAVAILABLE') || errStr.includes('quota') || errStr.includes('resource_exhausted');
         if (isTransient) {
           if (i < retries) {
             console.warn(`Gemini transient error on ${currentModel} (${err?.status}), retrying in ${delay * (i + 1)}ms...`);
@@ -57,6 +57,10 @@ How can I help you with your studies today?`
           } else if (mIdx < modelQueue.length - 1) {
             console.warn(`Gemini ${currentModel} exhausted, falling back to ${modelQueue[mIdx + 1]}...`);
             break;
+          } else {
+            return {
+              text: `SOMA Academic Intelligence (Quota Limit Exceeded): Your Gemini API quota limit has been temporarily reached. SOMA is operating in local curriculum and study planning mode while your API quota resets. You can continue managing your modules, assessments, and study schedule!`
+            };
           }
         }
         throw err;
