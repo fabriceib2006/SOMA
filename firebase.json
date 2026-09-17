@@ -1,0 +1,8 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-soma-3ae0d25f-c511-45f0-af71-5cc1b0faf7b7",
+      "rules": "firestore.rules"
+    }
+  ]
+}

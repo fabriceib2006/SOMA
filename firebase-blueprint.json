@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" }
+      },
+      "required": ["name", "email"]
+    },
+    "Module": {
+      "title": "Module",
+      "description": "Academic module",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "lecturer": { "type": "string" },
+        "credits": { "type": "number" },
+        "importance": { "type": "string", "enum": ["high", "medium", "low"] }
+      },
+      "required": ["name", "code", "credits", "importance"]
+    },
+    "Topic": {
+      "title": "Topic",
+      "description": "Study topic",
+      "type": "object",
+      "properties": {
+        "moduleId": { "type": "string" },
+        "name": { "type": "string" },
+        "masteryScore": { "type": "number" }
+      },
+      "required": ["moduleId", "name", "masteryScore"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User profiles"
+    },
+    "/modules/{moduleId}": {
+      "schema": { "$ref": "Module" },
+      "description": "Modules"
+    },
+    "/topics/{topicId}": {
+      "schema": { "$ref": "Topic" },
+      "description": "Topics"
+    }
+  }
+}

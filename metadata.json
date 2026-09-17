@@ -1,0 +1,6 @@
+{
+  "name": "SOMA",
+  "description": "AI-powered personal study OS that manages your curriculum, schedule, and study plan.",
+  "requestFramePermissions": ["camera", "microphone", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
