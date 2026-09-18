@@ -12,45 +12,63 @@ provider.setCustomParameters({
   prompt: 'consent'
 });
 
-let isSigningIn = false;
 let cachedAccessToken: string | null = null;
+const TOKEN_STORAGE_KEY = 'soma_google_access_token';
+
+try {
+  cachedAccessToken = typeof window !== 'undefined' ? sessionStorage.getItem(TOKEN_STORAGE_KEY) : null;
+} catch (e) {
+  // Ignore storage errors
+}
+
+let activeAuthSuccessCallback: ((user: User, token: string | null) => void) | null = null;
+let activeAuthFailureCallback: (() => void) | null = null;
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string | null) => void,
   onAuthFailure?: () => void
 ) => {
+  if (onAuthSuccess) activeAuthSuccessCallback = onAuthSuccess;
+  if (onAuthFailure) activeAuthFailureCallback = onAuthFailure;
+
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        // We have a user but no token (e.g. page reload). They need to re-authenticate 
-        // IF they want to use Calendar. But they can still use the rest of the app!
-        if (onAuthSuccess) onAuthSuccess(user, null);
+      if (onAuthSuccess) {
+        onAuthSuccess(user, cachedAccessToken);
       }
     } else {
       cachedAccessToken = null;
-      if (onAuthFailure) onAuthFailure();
+      try {
+        sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      } catch (e) {}
+      if (onAuthFailure) {
+        onAuthFailure();
+      }
     }
   });
 };
 
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   try {
-    isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     
     if (credential?.accessToken) {
       cachedAccessToken = credential.accessToken;
+      try {
+        sessionStorage.setItem(TOKEN_STORAGE_KEY, cachedAccessToken);
+      } catch (e) {}
+    }
+    
+    // Immediately notify active listeners so React state updates without delay
+    if (activeAuthSuccessCallback && result.user) {
+      activeAuthSuccessCallback(result.user, cachedAccessToken);
     }
     
     return { user: result.user, accessToken: cachedAccessToken || '' };
   } catch (error: any) {
     console.error('Sign in error:', error);
     throw error;
-  } finally {
-    isSigningIn = false;
   }
 };
 
@@ -61,4 +79,10 @@ export const getAccessToken = (): string | null => {
 export const logout = async () => {
   await signOut(auth);
   cachedAccessToken = null;
+  try {
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch (e) {}
+  if (activeAuthFailureCallback) {
+    activeAuthFailureCallback();
+  }
 };
