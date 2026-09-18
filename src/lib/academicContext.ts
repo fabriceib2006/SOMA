@@ -85,7 +85,8 @@ export function formatContextForGemini(context: Partial<AcademicContext>): strin
   let prompt = `
     Student Academic Context:
     - Active Semester: ${context.activeSemester?.name || 'N/A'}
-    - Modules: ${context.modules?.map(m => `${m.name} (${m.code})`).join(', ') || 'N/A'}
+    - Modules & Academic Credits: ${context.modules?.map(m => `${m.name} (${m.code || 'MOD'}, ${m.credits || 3} Credits)`).join(', ') || 'N/A'}
+    - Module Credit Guidance: Higher credit modules (4-6+ credits) represent heavier academic workload. Use credit weight as a study intensity input while never overriding urgent upcoming assessments.
     - Mastery Scores: ${context.mastery?.map(m => `${m.name}: ${m.masteryScore}% (Confidence: ${m.confidence})`).join(', ') || 'N/A'}
     - Upcoming Assessments: ${context.assessments?.map(a => `${a.title} (${a.type}, Due: ${a.dueDate})`).join(', ') || 'None'}
     - Academic Risk: ${context.risk?.map(r => `${r.moduleName}: ${r.riskLevel}`).join(', ') || 'None'}

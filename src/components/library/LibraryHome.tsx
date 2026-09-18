@@ -2,7 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { Semester, LibraryModule } from '../../types';
 import { createLibraryModule, deleteLibraryModule } from '../../lib/libraryFirestore';
 import { ModuleFolderView } from './ModuleFolderView';
+import { EditModuleCreditsModal } from './EditModuleCreditsModal';
 import { useSOMA } from '../../lib/realtime';
+import { Award, Edit3 } from 'lucide-react';
 
 export function LibraryHome() {
   const {
@@ -15,6 +17,7 @@ export function LibraryHome() {
   } = useSOMA();
 
   const [selectedModule, setSelectedModule] = useState<LibraryModule | null>(null);
+  const [editingModule, setEditingModule] = useState<LibraryModule | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -216,9 +219,25 @@ export function LibraryHome() {
                   <div>
                     <div className="flex justify-between items-start mb-3">
                       <span className="text-xs uppercase tracking-wider font-bold px-3 py-1 rounded-full bg-blue-50 text-blue-600">
-                        {m.code}
+                        {m.code || 'MOD'}
                       </span>
-                      <span className="text-xs text-neutral-400 font-medium">{m.credits} Credits</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                          <Award className="w-3 h-3 text-amber-600" />
+                          {m.credits || 3} Credits
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingModule(m);
+                          }}
+                          className="p-1 rounded-lg hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700 transition-colors"
+                          title="Edit credits and module details"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -342,6 +361,13 @@ export function LibraryHome() {
           </div>
         </div>
       )}
+      {/* Edit Module Credits Modal */}
+      <EditModuleCreditsModal
+        module={editingModule}
+        isOpen={!!editingModule}
+        onClose={() => setEditingModule(null)}
+        onSaved={() => setEditingModule(null)}
+      />
     </div>
   );
 }

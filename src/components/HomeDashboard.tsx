@@ -21,7 +21,8 @@ import {
   CheckCircle2,
   MoreVertical,
   Moon,
-  Sparkles
+  Sparkles,
+  Download
 } from 'lucide-react';
 import { auth } from '../lib/firebase';
 import { AcademicActivity, Semester, Week, AcademicDay, LectureMaterial, AcademicAssessment, LibraryModule } from '../types';
@@ -42,6 +43,7 @@ import { updateSessionStatus } from '../lib/plannerFirestore';
 import { useSOMA } from '../lib/realtime';
 import { GoogleCalendarConnect } from './GoogleCalendarConnect';
 import { UpcomingEvents } from './UpcomingEvents';
+import { formatTimeSlot, sortActivitiesChronologically } from '../lib/timetableUtils';
 
 interface HomeDashboardProps {
   user: User;
@@ -210,7 +212,7 @@ export function HomeDashboard({ user, onNavigateTab, onOpenDay, onOpenAI, onOpen
     ? evaluateAcademicDayStatus(activeDay.date, catTime, isDayManuallyEnded(activeDay.id))
     : { status: 'UPCOMING' as const, badgeText: 'UPCOMING', badgeClass: '', isEnded: false, isToday: false, isUpcoming: false, explanation: '' };
 
-  const classesList = dayActivities.filter(a => a.type === 'class');
+  const classesList = sortActivitiesChronologically(dayActivities.filter(a => a.type === 'class'));
   const studySessionsList = dayActivities.filter(a => a.type === 'study_session');
   const upcomingAssessments = allAssessments.filter(a => a.status === 'Upcoming' || a.status === 'Ready' || a.status === 'Scheduled' || a.status === 'Preparing');
 
@@ -315,6 +317,18 @@ export function HomeDashboard({ user, onNavigateTab, onOpenDay, onOpenAI, onOpen
                   <p className="text-xs text-neutral-500 truncate">{user.email}</p>
                 </div>
               </div>
+              <button
+                onClick={() => {
+                  setShowProfileMenu(false);
+                  if ((window as any).somaTriggerInstall) {
+                    (window as any).somaTriggerInstall();
+                  }
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-xl transition-all mb-1"
+              >
+                <Download className="w-4 h-4" />
+                <span>Install SOMA App</span>
+              </button>
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-xl transition-all"
@@ -460,20 +474,45 @@ export function HomeDashboard({ user, onNavigateTab, onOpenDay, onOpenAI, onOpen
             </div>
 
             <div className="space-y-3">
-              {classesList.map(c => (
-                <div key={c.id} className="p-4 rounded-2xl border bg-white flex justify-between items-center">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-blue-50 text-blue-600">
-                      Class • {c.startTime} - {c.endTime}
-                    </span>
-                    <h4 className="font-bold text-neutral-900 mt-2 text-base">{c.title}</h4>
-                    <p className="text-xs text-neutral-500">{c.moduleName}</p>
-                  </div>
-                  <span className={`text-xs px-3 py-1 rounded-full font-medium ${dayStatus.isEnded ? 'bg-neutral-100 text-neutral-500' : 'bg-emerald-50 text-emerald-600'}`}>
-                    {dayStatus.isEnded ? 'Concluded' : 'Active'}
-                  </span>
+              {classesList.length === 0 ? (
+                <div className="p-6 text-center border border-dashed rounded-2xl bg-neutral-50/60 text-neutral-400 text-sm">
+                  No classes scheduled for this day.
+                  {activeDay && (
+                    <div className="mt-2">
+                      <button
+                        onClick={() => onOpenDay(activeDay)}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 underline"
+                      >
+                        + Add a class to {activeDay.dayOfWeek}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ))}
+              ) : (
+                classesList.map(c => (
+                  <div 
+                    key={c.id} 
+                    className="p-4 rounded-2xl border bg-white hover:border-neutral-300 transition-all flex justify-between items-center group cursor-pointer"
+                    onClick={() => activeDay && onOpenDay(activeDay)}
+                  >
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-blue-50 text-blue-600">
+                        Class • {formatTimeSlot(c.startTime, c.endTime)}
+                      </span>
+                      <h4 className="font-bold text-neutral-900 mt-2 text-base">{c.title}</h4>
+                      <p className="text-xs text-neutral-500">{c.moduleName || c.title}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-3 py-1 rounded-full font-medium ${dayStatus.isEnded ? 'bg-neutral-100 text-neutral-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                        {dayStatus.isEnded ? 'Concluded' : 'Active'}
+                      </span>
+                      <span className="text-xs text-neutral-400 group-hover:text-blue-600 transition-colors font-medium">
+                        Edit →
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

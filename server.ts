@@ -151,7 +151,7 @@ app.use((req, res, next) => {
         ${catContext}
         
         STUDENT CONTEXT:
-        - Modules: ${JSON.stringify(modules)}
+        - Modules & Credit Weights: ${JSON.stringify(modules)}
         - Topic Mastery & Trends: ${JSON.stringify(topics)}
         - Mastery Scores: ${JSON.stringify(masteryScores)}
         - Academic Risk Profile: ${JSON.stringify(studentRisk)}
@@ -165,8 +165,9 @@ app.use((req, res, next) => {
         2. The academic day concludes at 23:00 CAT. NO sessions after 23:00.
         3. Do NOT schedule study sessions during fixed classes in ${JSON.stringify(existingTimetable)} OR during any Google Calendar external commitments: ${JSON.stringify(externalCalendarEvents)}.
         4. Prioritize topics with high academic risk, low mastery, and imminent assessments.
-        5. Session "reason" must be specific: e.g., "Recursion mastery is Developing (45%); CAT is in 3 days."
-        6. Use Task Types: Review Lecture, Active Recall, Practice, Problem Solving, Assignment, Revision, Exam Preparation, Mistake Review, Tutor Session, Notes Processing.`,
+        5. Module Credit Factor: Consider module credits (e.g. 4-6 credits) as an input for academic importance and workload reasoning (higher credit courses require more foundational study blocks), while NEVER overriding urgent impending assessments or critical mastery deficits.
+        6. Session "reason" must be specific: e.g., "Recursion mastery is Developing (45%); CAT is in 3 days; 4-credit core module."
+        7. Use Task Types: Review Lecture, Active Recall, Practice, Problem Solving, Assignment, Revision, Exam Preparation, Mistake Review, Tutor Session, Notes Processing.`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {

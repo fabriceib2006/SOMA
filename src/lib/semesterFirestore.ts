@@ -11,6 +11,7 @@ import {
   writeBatch 
 } from 'firebase/firestore';
 import { Semester, Week, AcademicDay, AcademicActivity } from '../types';
+import { cleanTimeValues } from './timetableUtils';
 
 export interface WeeklyModuleTemplate {
   dayOfWeek: string;
@@ -110,6 +111,7 @@ export const createSemesterHierarchyInFirestore = async (
       const template = weeklyTemplate.find(t => t.dayOfWeek === dayOfWeek);
       if (template) {
         if (template.morningModule && template.morningModule.trim()) {
+          const { startTime: cleanStart, endTime: cleanEnd } = cleanTimeValues(template.morningTime || '09:00', '12:00');
           allActivities.push({
             id: `act_m_${dayId}_${Date.now()}`,
             dayId,
@@ -118,11 +120,12 @@ export const createSemesterHierarchyInFirestore = async (
             type: 'class',
             title: template.morningModule.trim(),
             moduleName: template.morningModule.trim(),
-            startTime: template.morningTime || '09:00',
-            endTime: '12:00'
+            startTime: cleanStart || '09:00',
+            endTime: cleanEnd || '12:00'
           });
         }
         if (template.afternoonModule && template.afternoonModule.trim()) {
+          const { startTime: cleanStart, endTime: cleanEnd } = cleanTimeValues(template.afternoonTime || '13:00', '17:00');
           allActivities.push({
             id: `act_a_${dayId}_${Date.now()}`,
             dayId,
@@ -131,8 +134,8 @@ export const createSemesterHierarchyInFirestore = async (
             type: 'class',
             title: template.afternoonModule.trim(),
             moduleName: template.afternoonModule.trim(),
-            startTime: template.afternoonTime || '13:00',
-            endTime: '17:00'
+            startTime: cleanStart || '13:00',
+            endTime: cleanEnd || '17:00'
           });
         }
       }
@@ -253,3 +256,271 @@ export const deleteFirestoreActivity = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, 'activities', id));
   }
 };
+
+export const moveFirestoreActivityToDay = async (
+  id: string, 
+  targetDayId: string, 
+  timeUpdates?: { startTime?: string; endTime?: string }
+): Promise<void> => {
+  if (!db) return;
+  const updates: Partial<AcademicActivity> = { dayId: targetDayId };
+  if (timeUpdates) {
+    const { startTime, endTime } = cleanTimeValues(timeUpdates.startTime, timeUpdates.endTime);
+    if (startTime) updates.startTime = startTime;
+    if (endTime) updates.endTime = endTime;
+  }
+  await updateFirestoreActivity(id, updates);
+};
+
+export interface MoveClassSlotAllWeeksParams {
+  activity: AcademicActivity;
+  sourceDayOfWeek: string;
+  targetDayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  allDays: AcademicDay[];
+  weeks: Week[];
+}
+
+/**
+ * Moves a class slot from sourceDayOfWeek to targetDayOfWeek across ALL weeks of the active semester.
+ * Guarantees all weeks remain identical with matching class slots on the destination day.
+ */
+export const moveClassSlotAcrossAllWeeks = async ({
+  activity,
+  sourceDayOfWeek,
+  targetDayOfWeek,
+  startTime,
+  endTime,
+  allDays,
+  weeks
+}: MoveClassSlotAllWeeksParams): Promise<{ movedCount: number }> => {
+  if (!db) return { movedCount: 0 };
+
+  const { startTime: cleanStart, endTime: cleanEnd } = cleanTimeValues(startTime, endTime);
+  const finalStart = cleanStart || '09:00';
+  const finalEnd = cleanEnd || '12:00';
+
+  // 1. Fetch current activities from Firestore to ensure we have fresh state for all weeks
+  let allActivities: AcademicActivity[] = [];
+  try {
+    const userId = auth.currentUser?.uid || activity.userId;
+    let snap;
+    if (userId) {
+      try {
+        const q = query(collection(db, 'activities'), where('userId', '==', userId));
+        snap = await getDocs(q);
+      } catch (err) {
+        snap = await getDocs(collection(db, 'activities'));
+      }
+    } else {
+      snap = await getDocs(collection(db, 'activities'));
+    }
+    allActivities = snap.docs.map(d => ({ ...d.data(), id: d.id } as AcademicActivity));
+  } catch (err) {
+    console.warn('Failed to load all activities for batch update, using fallback', err);
+  }
+
+  const batch = writeBatch(db);
+  let opCount = 0;
+
+  const targetTitleLower = (activity.title || '').trim().toLowerCase();
+  const targetModuleNameLower = (activity.moduleName || activity.title || '').trim().toLowerCase();
+
+  for (const week of weeks) {
+    const sourceDay = allDays.find(
+      d => d.weekId === week.id && d.dayOfWeek.toLowerCase() === sourceDayOfWeek.toLowerCase()
+    );
+    const targetDay = allDays.find(
+      d => d.weekId === week.id && d.dayOfWeek.toLowerCase() === targetDayOfWeek.toLowerCase()
+    );
+
+    if (!targetDay) continue;
+
+    // Gather all class activities on sourceDay for this week matching title or moduleName
+    const sourceCandidates = sourceDay
+      ? allActivities.filter(a => {
+          if (a.dayId !== sourceDay.id || a.type !== 'class') return false;
+          const aTitle = (a.title || '').trim().toLowerCase();
+          const aMod = (a.moduleName || a.title || '').trim().toLowerCase();
+          return aIdMatches(a, activity) || aTitle === targetTitleLower || aMod === targetModuleNameLower;
+        })
+      : [];
+
+    // Gather all class activities on targetDay for this week matching title or moduleName
+    const targetCandidates = allActivities.filter(a => {
+      if (a.dayId !== targetDay.id || a.type !== 'class') return false;
+      const aTitle = (a.title || '').trim().toLowerCase();
+      const aMod = (a.moduleName || a.title || '').trim().toLowerCase();
+      return aIdMatches(a, activity) || aTitle === targetTitleLower || aMod === targetModuleNameLower;
+    });
+
+    if (sourceCandidates.length > 0) {
+      // Move the first source candidate to targetDay with new times
+      const primarySource = sourceCandidates[0];
+      const actRef = doc(db, 'activities', primarySource.id);
+      batch.set(
+        actRef,
+        {
+          dayId: targetDay.id,
+          startTime: finalStart,
+          endTime: finalEnd,
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+      opCount++;
+
+      // Delete any duplicate source candidates on sourceDay
+      for (let i = 1; i < sourceCandidates.length; i++) {
+        batch.delete(doc(db, 'activities', sourceCandidates[i].id));
+        opCount++;
+      }
+
+      // If targetDay already had target candidates (excluding primarySource if it was moved there), delete or update them
+      for (const tCand of targetCandidates) {
+        if (tCand.id !== primarySource.id) {
+          batch.delete(doc(db, 'activities', tCand.id));
+          opCount++;
+        }
+      }
+    } else if (targetCandidates.length > 0) {
+      // No source candidate in this week, but target candidate exists -> update its times
+      for (const tCand of targetCandidates) {
+        const actRef = doc(db, 'activities', tCand.id);
+        batch.set(
+          actRef,
+          {
+            startTime: finalStart,
+            endTime: finalEnd,
+            updatedAt: new Date().toISOString()
+          },
+          { merge: true }
+        );
+        opCount++;
+      }
+    } else {
+      // Neither source nor target candidate exists in this week -> create one on targetDay so all weeks are identical
+      const newActId = `act_${targetDay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+      const actRef = doc(db, 'activities', newActId);
+      const newAct: AcademicActivity = {
+        id: newActId,
+        dayId: targetDay.id,
+        userId: auth.currentUser?.uid || activity.userId || 'current_user',
+        semesterId: activity.semesterId || week.semesterId,
+        type: 'class',
+        title: activity.title,
+        moduleName: activity.moduleName || activity.title,
+        startTime: finalStart,
+        endTime: finalEnd,
+        status: 'Upcoming',
+        source: 'master_timetable',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      batch.set(actRef, newAct);
+      opCount++;
+    }
+  }
+
+  if (opCount > 0) {
+    await batch.commit();
+  }
+
+  return { movedCount: opCount };
+};
+
+// Helper for matching activity ID or title/module
+function aIdMatches(a: AcademicActivity, target: AcademicActivity): boolean {
+  if (a.id === target.id) return true;
+  const aTitle = (a.title || '').trim().toLowerCase();
+  const aMod = (a.moduleName || a.title || '').trim().toLowerCase();
+  const tTitle = (target.title || '').trim().toLowerCase();
+  const tMod = (target.moduleName || target.title || '').trim().toLowerCase();
+  return (aTitle && aTitle === tTitle) || (aMod && aMod === tMod);
+}
+
+export interface RemoveClassSlotAllWeeksParams {
+  activity: AcademicActivity;
+  dayOfWeek: string;
+  allDays: AcademicDay[];
+  weeks: Week[];
+}
+
+/**
+ * Removes a class slot from dayOfWeek across ALL weeks of the active semester.
+ */
+export const removeClassSlotAcrossAllWeeks = async ({
+  activity,
+  dayOfWeek,
+  allDays,
+  weeks
+}: RemoveClassSlotAllWeeksParams): Promise<{ removedCount: number }> => {
+  if (!db) return { removedCount: 0 };
+
+  let allActivities: AcademicActivity[] = [];
+  try {
+    const userId = auth.currentUser?.uid || activity.userId;
+    let snap;
+    if (userId) {
+      try {
+        const q = query(collection(db, 'activities'), where('userId', '==', userId));
+        snap = await getDocs(q);
+      } catch (err) {
+        snap = await getDocs(collection(db, 'activities'));
+      }
+    } else {
+      snap = await getDocs(collection(db, 'activities'));
+    }
+    allActivities = snap.docs.map(d => ({ ...d.data(), id: d.id } as AcademicActivity));
+  } catch (err) {
+    console.warn('Failed to load activities for removal, fallback to single delete', err);
+    await deleteFirestoreActivity(activity.id);
+    return { removedCount: 1 };
+  }
+
+  const batch = writeBatch(db);
+  let opCount = 0;
+  const deletedIds = new Set<string>();
+
+  for (const week of weeks) {
+    const day = allDays.find(
+      d => d.weekId === week.id && d.dayOfWeek.toLowerCase() === dayOfWeek.toLowerCase()
+    );
+    if (!day) continue;
+
+    const candidates = allActivities.filter(a => a.dayId === day.id && a.type === 'class');
+    const matchingCandidates = candidates.filter(a => aIdMatches(a, activity));
+
+    for (const match of matchingCandidates) {
+      if (!deletedIds.has(match.id)) {
+        batch.delete(doc(db, 'activities', match.id));
+        deletedIds.add(match.id);
+        opCount++;
+      }
+    }
+  }
+
+  // Ensure clicked activity itself and any matching instances are deleted
+  const fallbackMatches = allActivities.filter(a => aIdMatches(a, activity));
+  for (const match of fallbackMatches) {
+    if (!deletedIds.has(match.id)) {
+      batch.delete(doc(db, 'activities', match.id));
+      deletedIds.add(match.id);
+      opCount++;
+    }
+  }
+
+  if (!deletedIds.has(activity.id)) {
+    batch.delete(doc(db, 'activities', activity.id));
+    opCount++;
+  }
+
+  if (opCount > 0) {
+    await batch.commit();
+  }
+
+  return { removedCount: opCount };
+};
+
+

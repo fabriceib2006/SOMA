@@ -60,7 +60,7 @@ export const generateAndPersistDailyPlan = async (
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        modules: modules.map(m => ({ id: m.id, name: m.name })),
+        modules: modules.map(m => ({ id: m.id, name: m.name, code: m.code, credits: m.credits || 3 })),
         topics: calculatedTopics.map(t => ({ 
           id: t.id, 
           name: t.name, 

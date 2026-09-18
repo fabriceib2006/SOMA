@@ -6,6 +6,7 @@ import { clearFirestoreDatabase } from '../lib/semesterFirestore';
 import { AcademicActivity } from '../types';
 import { getCATDateComponents, CATDateComponents, evaluateAcademicDayStatus, isDayManuallyEnded } from '../lib/catTime';
 import { useSOMA } from '../lib/realtime';
+import { formatTimeSlot, sortActivitiesChronologically } from '../lib/timetableUtils';
 
 interface SemesterDashboardProps {
   initialDay?: AcademicDay | null;
@@ -141,7 +142,7 @@ export function SemesterDashboard({ initialDay, onSelectDay }: SemesterDashboard
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {days.map(day => {
           const acts = dayActivitiesMap[day.id] || [];
-          const classes = acts.filter(a => a.type === 'class');
+          const classes = sortActivitiesChronologically(acts.filter(a => a.type === 'class'));
           const assessments = acts.filter(a => a.type !== 'class');
           const dayStatus = evaluateAcademicDayStatus(day.date, catTime, isDayManuallyEnded(day.id));
 
@@ -194,7 +195,7 @@ export function SemesterDashboard({ initialDay, onSelectDay }: SemesterDashboard
                       }`}>
                         <span className={`font-semibold ${dayStatus.isEnded ? 'text-neutral-700' : 'text-blue-900'}`}>{c.title}</span>
                         <span className={dayStatus.isEnded ? 'text-neutral-500' : 'text-blue-600 font-medium'}>
-                          {c.startTime}
+                          {formatTimeSlot(c.startTime, c.endTime)}
                         </span>
                       </div>
                     ))

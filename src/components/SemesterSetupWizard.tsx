@@ -13,11 +13,11 @@ export function SemesterSetupWizard({ onComplete }: { onComplete?: () => void })
   });
 
   const [weeklyTemplate, setWeeklyTemplate] = useState<WeeklyModuleTemplate[]>([
-    { dayOfWeek: 'Monday', morningModule: '', morningTime: '09:00 - 12:00', afternoonModule: '', afternoonTime: '13:00 - 17:00' },
-    { dayOfWeek: 'Tuesday', morningModule: '', morningTime: '09:00 - 12:00', afternoonModule: '', afternoonTime: '13:00 - 17:00' },
-    { dayOfWeek: 'Wednesday', morningModule: '', morningTime: '09:00 - 12:00', afternoonModule: '', afternoonTime: '13:00 - 17:00' },
-    { dayOfWeek: 'Thursday', morningModule: '', morningTime: '09:00 - 12:00', afternoonModule: '', afternoonTime: '13:00 - 17:00' },
-    { dayOfWeek: 'Friday', morningModule: '', morningTime: '09:00 - 12:00', afternoonModule: '', afternoonTime: '13:00 - 17:00' },
+    { dayOfWeek: 'Monday', morningModule: '', morningTime: '09:00', afternoonModule: '', afternoonTime: '13:00' },
+    { dayOfWeek: 'Tuesday', morningModule: '', morningTime: '09:00', afternoonModule: '', afternoonTime: '13:00' },
+    { dayOfWeek: 'Wednesday', morningModule: '', morningTime: '09:00', afternoonModule: '', afternoonTime: '13:00' },
+    { dayOfWeek: 'Thursday', morningModule: '', morningTime: '09:00', afternoonModule: '', afternoonTime: '13:00' },
+    { dayOfWeek: 'Friday', morningModule: '', morningTime: '09:00', afternoonModule: '', afternoonTime: '13:00' },
   ]);
 
   const handleTemplateChange = (dayOfWeek: string, field: 'morningModule' | 'afternoonModule', value: string) => {
