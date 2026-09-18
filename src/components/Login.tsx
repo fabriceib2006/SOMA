@@ -3,13 +3,22 @@ import { googleSignIn } from '../lib/auth';
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleLogin = async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
       await googleSignIn();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed", error);
+      if (error?.code === 'auth/unauthorized-domain' || error?.message?.includes('unauthorized-domain')) {
+        setErrorMessage(`Domain not authorized: Please add "${window.location.hostname}" to your Firebase Console under Authentication > Settings > Authorized Domains.`);
+      } else if (error?.code === 'auth/popup-closed-by-user') {
+        setErrorMessage('Sign-in cancelled. Please try again.');
+      } else {
+        setErrorMessage(error?.message || 'Login failed. Please check your credentials and try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -34,6 +43,12 @@ export default function Login() {
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
           {loading ? 'Signing in...' : 'Sign in with Google'}
         </button>
+
+        {errorMessage && (
+          <div className="w-full p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl leading-relaxed">
+            {errorMessage}
+          </div>
+        )}
       </div>
     </div>
   );
