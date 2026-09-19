@@ -6,7 +6,10 @@ import { getCATDateComponents, normalizeToCATDateString } from '../../lib/catTim
 import { collection, addDoc } from 'firebase/firestore';
 import { useSOMA } from '../../lib/realtime';
 import { cleanUndefined } from '../../lib/firestoreUtils';
-import { File, X, Sparkles, UploadCloud, Loader2, Award, Calendar, CheckSquare } from 'lucide-react';
+import { File, X, Sparkles, UploadCloud, Loader2, Award, Calendar, CheckSquare, Trash2 } from 'lucide-react';
+import { deleteAssessmentWithCascade } from '../../lib/academicCascadeDelete';
+import { safeParseDueDate } from '../../lib/safeDateUtils';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export function AssessmentsTab({ module, assessments, viewType, onRefresh }: { module: LibraryModule; assessments: AcademicAssessment[]; viewType: 'assignments' | 'cats'; onRefresh: () => void }) {
   const { days } = useSOMA();
@@ -54,14 +57,36 @@ export function AssessmentsTab({ module, assessments, viewType, onRefresh }: { m
     setIsDragging(false);
   };
 
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [asmToDelete, setAsmToDelete] = useState<AcademicAssessment | null>(null);
+
+  const handleDelete = (asm: AcademicAssessment) => {
+    setAsmToDelete(asm);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!asmToDelete) return;
+    try {
+      setDeletingId(asmToDelete.id);
+      await deleteAssessmentWithCascade(asmToDelete.id);
+      setAsmToDelete(null);
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to delete assessment:', err);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
     setSaving(true);
     const userId = auth.currentUser?.uid || 'current_user';
-    await createAssessment(userId, {
+    const assessmentId = await createAssessment(userId, {
       semesterId: module.semesterId,
       moduleId: module.id,
+      moduleName: module.name,
       type,
       title: title.trim(),
       dueDate,
@@ -83,7 +108,8 @@ export function AssessmentsTab({ module, assessments, viewType, onRefresh }: { m
             moduleName: module.name,
             moduleId: module.id,
             status: 'PENDING',
-            durationMinutes: 60
+            durationMinutes: 60,
+            assessmentId
           }));
         } catch (err) {
           console.error(err);
@@ -143,37 +169,54 @@ export function AssessmentsTab({ module, assessments, viewType, onRefresh }: { m
             </button>
           </div>
         ) : (
-          assessments.map((a, index) => (
-            <div key={a.id || `asm_${index}`} className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-blue-200 transition-all">
-              <div className="space-y-1.5 min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`text-[11px] uppercase tracking-wider font-bold px-2.5 py-0.5 rounded-full border ${
-                    a.type === 'cat' ? 'bg-red-50 text-red-700 border-red-200' :
-                    a.type === 'quiz' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                    a.type === 'assignment' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'
-                  }`}>
-                    {a.type}
-                  </span>
-                  <span className="text-xs text-neutral-500 font-medium flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-neutral-400" />
-                    Due: {a.dueDate}
-                  </span>
-                </div>
-                <h4 className="font-bold text-base sm:text-lg text-neutral-900 break-words">{a.title}</h4>
-                {a.fileName && (
-                  <div className="flex items-center gap-2 p-1.5 px-2.5 bg-blue-50/60 rounded-lg border border-blue-100 w-fit max-w-full">
-                    <File className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <span className="text-xs text-blue-900 font-medium truncate">{a.fileName}</span>
+          assessments.map((a, index) => {
+            const parsed = safeParseDueDate(a.dueDate);
+            return (
+              <div key={a.id || `asm_${index}`} className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-blue-200 transition-all group">
+                <div className="space-y-1.5 min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`text-[11px] uppercase tracking-wider font-bold px-2.5 py-0.5 rounded-full border ${
+                      a.type === 'cat' ? 'bg-red-50 text-red-700 border-red-200' :
+                      a.type === 'quiz' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                      a.type === 'assignment' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'
+                    }`}>
+                      {a.type}
+                    </span>
+                    <span className="text-xs text-neutral-500 font-medium flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-neutral-400" />
+                      Due: {parsed.formattedDueDate}
+                    </span>
+                    {parsed.isValid && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-neutral-100 text-neutral-600">
+                        {parsed.daysRemaining === 0 ? 'Today' : `${parsed.daysRemaining}d away`}
+                      </span>
+                    )}
                   </div>
-                )}
+                  <h4 className="font-bold text-base sm:text-lg text-neutral-900 break-words">{a.title}</h4>
+                  {a.fileName && (
+                    <div className="flex items-center gap-2 p-1.5 px-2.5 bg-blue-50/60 rounded-lg border border-blue-100 w-fit max-w-full">
+                      <File className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <span className="text-xs text-blue-900 font-medium truncate">{a.fileName}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 self-start sm:self-center shrink-0 pt-1 sm:pt-0">
+                  <span className="text-xs font-semibold px-3 py-1 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200">
+                    {a.status}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(a)}
+                    disabled={deletingId === a.id}
+                    title="Delete assessment (cascade delete from timetable, calendar & study plan)"
+                    className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors border border-transparent hover:border-red-100"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-              <div className="self-start sm:self-center shrink-0 pt-1 sm:pt-0">
-                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200">
-                  {a.status}
-                </span>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -360,6 +403,23 @@ export function AssessmentsTab({ module, assessments, viewType, onRefresh }: { m
           </div>
         </div>
       )}
+
+      {/* Delete Assessment Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!asmToDelete}
+        title="Delete Assessment"
+        itemName={asmToDelete?.title || ''}
+        itemType="Assessment"
+        impactDetails={[
+          "Removes this assessment from your library and progress",
+          "Removes it from the Academic Timeline and Home page Deadlines",
+          "Deletes any associated Google Calendar events",
+          "Rebalances your daily study planner"
+        ]}
+        confirmButtonText="Delete Assessment"
+        onClose={() => setAsmToDelete(null)}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 }

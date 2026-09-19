@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { LibraryModule, LibraryTopic, AcademicAssessment, ExerciseSubmission, TopicEvidenceRecord, CalculatedTopicMastery, AssessmentReadinessRecord, AcademicRiskRecord } from '../types';
 import { getLibraryModules, getModuleTopics, getModuleAssessments, getModuleSubmissions } from './libraryFirestore';
+import { safeParseDueDate } from './safeDateUtils';
 
 export const getTopicEvidence = async (semesterId: string, moduleId?: string, topicId?: string): Promise<TopicEvidenceRecord[]> => {
   if (!db) return [];
@@ -206,9 +207,8 @@ export const getAssessmentReadiness = (
   const today = new Date();
 
   return assessments.map(asm => {
-    const dueDate = new Date(asm.dueDate);
-    const diffTime = dueDate.getTime() - today.getTime();
-    const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    const parsedDate = safeParseDueDate(asm.dueDate);
+    const daysRemaining = parsedDate.daysRemaining;
 
     // Related topics in the module
     const moduleTopics = topics.filter(t => t.moduleId === asm.moduleId);
@@ -269,8 +269,8 @@ export const getAcademicRiskAnalysis = (
     const upcomingAsm = assessments.find(a => a.moduleId === mod.id && a.status !== 'Completed');
     let daysRemaining: number | undefined;
     if (upcomingAsm) {
-      const diff = new Date(upcomingAsm.dueDate).getTime() - new Date().getTime();
-      daysRemaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+      const parsedUpcoming = safeParseDueDate(upcomingAsm.dueDate);
+      daysRemaining = parsedUpcoming.daysRemaining;
     }
 
     const reasons: string[] = [];

@@ -19,7 +19,8 @@ import {
   BarChart3,
   ExternalLink,
   X,
-  PenTool
+  PenTool,
+  Trash2
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line } from 'recharts';
 import { Semester, LibraryModule, LibraryTopic, AcademicAssessment, ExerciseSubmission, CalculatedTopicMastery, TopicEvidenceRecord, AssessmentReadinessRecord, AcademicRiskRecord } from '../types';
@@ -27,6 +28,9 @@ import { getCATDateComponents, normalizeToCATDateString } from '../lib/catTime';
 import { GeneratePlanButton } from './planner/GeneratePlanButton';
 import { auth } from '../lib/firebase';
 import { useSOMA } from '../lib/realtime';
+import { deleteAssessmentWithCascade, cleanOrphanAssessments } from '../lib/academicCascadeDelete';
+import { safeParseDueDate } from '../lib/safeDateUtils';
+import { ConfirmDeleteModal } from './common/ConfirmDeleteModal';
 
 interface AcademicDashboardProps {
   onNavigateTab?: (tab: string) => void;
@@ -68,6 +72,49 @@ export const AcademicDashboard: React.FC<AcademicDashboardProps> = ({
     recommendations: { action: string; duration: string; reason: string }[];
   } | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
+
+  // Assessment deletion and cleanup state
+  const [assessmentToDelete, setAssessmentToDelete] = useState<{ id: string; title: string; moduleName?: string } | null>(null);
+  const [deletingAssessmentId, setDeletingAssessmentId] = useState<string | null>(null);
+  const [cleanFeedback, setCleanFeedback] = useState<string | null>(null);
+  const [isCleaning, setIsCleaning] = useState(false);
+
+  const handleDeleteAssessment = (assessmentId: string, title: string, moduleName?: string) => {
+    setAssessmentToDelete({ id: assessmentId, title, moduleName });
+  };
+
+  const handleConfirmDeleteAssessment = async () => {
+    if (!assessmentToDelete) return;
+    try {
+      setDeletingAssessmentId(assessmentToDelete.id);
+      const title = assessmentToDelete.title;
+      await deleteAssessmentWithCascade(assessmentToDelete.id);
+      setAssessmentToDelete(null);
+      setCleanFeedback(`✓ Successfully deleted "${title}" from assessments, progress, and timetable.`);
+      setTimeout(() => setCleanFeedback(null), 6000);
+    } catch (err) {
+      console.error('Failed to delete assessment:', err);
+    } finally {
+      setDeletingAssessmentId(null);
+    }
+  };
+
+  const handleCleanOrphans = async () => {
+    try {
+      setIsCleaning(true);
+      const res = await cleanOrphanAssessments();
+      if (res.cleanedCount > 0) {
+        setCleanFeedback(`Purged ${res.cleanedCount} ghost plan${res.cleanedCount > 1 ? 's' : ''}: ${res.cleanedTitles.join(', ')}`);
+      } else {
+        setCleanFeedback('All assessment plans are cleanly synced with your academic timeline.');
+      }
+      setTimeout(() => setCleanFeedback(null), 6000);
+    } catch (e) {
+      console.error('Failed to clean orphans:', e);
+    } finally {
+      setIsCleaning(false);
+    }
+  };
 
   // Filtered topics
   const filteredTopics = useMemo(() => {
@@ -452,46 +499,85 @@ export const AcademicDashboard: React.FC<AcademicDashboardProps> = ({
             <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
               <Clock className="w-4 h-4 text-purple-600" /> Assessment Readiness
             </h3>
-            <span className="text-xs text-neutral-400">Preparation vs Scope</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCleanOrphans}
+                disabled={isCleaning}
+                className="text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-lg transition-all disabled:opacity-50"
+                title="Scan and purge any phantom or duplicate assessments not matched on the academic timeline"
+              >
+                {isCleaning ? 'Cleaning...' : 'Purge Ghost Plans'}
+              </button>
+              <span className="text-xs text-neutral-400 hidden sm:inline">Preparation vs Scope</span>
+            </div>
           </div>
+
+          {cleanFeedback && (
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-800 font-medium leading-relaxed">
+              {cleanFeedback}
+            </div>
+          )}
 
           {readinessList.length === 0 ? (
             <p className="text-sm text-neutral-500 text-center py-8">No scheduled assessments in this semester.</p>
           ) : (
             <div className="space-y-3">
-              {readinessList.slice(0, 3).map((item, i) => (
-                <div key={i} className="p-4 rounded-2xl border bg-neutral-50/50 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">
-                        {item.assessment.type.toUpperCase()} • {item.moduleName}
-                      </span>
-                      <h4 className="font-bold text-neutral-900 text-sm mt-1">{item.assessment.title}</h4>
-                    </div>
-                    <div className="text-right">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        item.urgency === 'Critical' ? 'bg-red-100 text-red-700' :
-                        item.urgency === 'High' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {item.daysRemaining} days away
-                      </span>
-                      <div className="text-xs font-extrabold text-neutral-900 mt-1">
-                        Readiness: {item.readinessPercentage}%
+              {readinessList.map((item, i) => {
+                const parsed = safeParseDueDate(item.assessment.dueDate);
+                return (
+                  <div key={item.assessment.id || i} className="p-4 rounded-2xl border bg-neutral-50/50 space-y-2 hover:bg-white hover:border-neutral-300 transition-all">
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">
+                            {item.assessment.type.toUpperCase()} • {item.moduleName}
+                          </span>
+                          <span className="text-[10px] text-neutral-500">
+                            Due: {parsed.formattedDueDate}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-neutral-900 text-sm mt-1">{item.assessment.title}</h4>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            item.urgency === 'Critical' ? 'bg-red-100 text-red-700' :
+                            item.urgency === 'High' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {item.daysRemaining === 0 ? 'Today' : `${item.daysRemaining} days away`}
+                          </span>
+                          <div className="text-xs font-extrabold text-neutral-900 mt-1">
+                            Readiness: {item.readinessPercentage}%
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteAssessment(item.assessment.id, item.assessment.title, item.moduleName);
+                          }}
+                          disabled={deletingAssessmentId === item.assessment.id}
+                          title="Delete assessment (removes from progress, academic timeline, Google calendar, and rebalances study plan)"
+                          className="p-1.5 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
+                    <div className="w-full bg-neutral-200 h-1.5 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full ${
+                          item.readinessPercentage >= 75 ? 'bg-emerald-500' :
+                          item.readinessPercentage >= 55 ? 'bg-amber-500' : 'bg-red-500'
+                        }`} 
+                        style={{ width: `${item.readinessPercentage}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-neutral-500">{item.recommendedAction}</p>
                   </div>
-                  <div className="w-full bg-neutral-200 h-1.5 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${
-                        item.readinessPercentage >= 75 ? 'bg-emerald-500' :
-                        item.readinessPercentage >= 55 ? 'bg-amber-500' : 'bg-red-500'
-                      }`} 
-                      style={{ width: `${item.readinessPercentage}%` }}
-                    />
-                  </div>
-                  <p className="text-[11px] text-neutral-500">{item.recommendedAction}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -773,6 +859,24 @@ export const AcademicDashboard: React.FC<AcademicDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Delete Assessment Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!assessmentToDelete}
+        title="Delete Assessment"
+        itemName={assessmentToDelete ? `${assessmentToDelete.title}${assessmentToDelete.moduleName ? ` (${assessmentToDelete.moduleName})` : ''}` : ''}
+        itemType="Assessment"
+        impactDetails={[
+          "Removes this assessment from Progress & Assessment Readiness",
+          "Removes the corresponding deadline from your Home dashboard",
+          "Clears the entry from your Academic Timeline day folder",
+          "Removes the associated Google Calendar event",
+          "Automatically rebalances your AI daily study schedule"
+        ]}
+        confirmButtonText="Delete Assessment"
+        onClose={() => setAssessmentToDelete(null)}
+        onConfirm={handleConfirmDeleteAssessment}
+      />
     </div>
   );
 };

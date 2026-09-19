@@ -7,6 +7,7 @@ import { AcademicActivity } from '../types';
 import { getCATDateComponents, CATDateComponents, evaluateAcademicDayStatus, isDayManuallyEnded } from '../lib/catTime';
 import { useSOMA } from '../lib/realtime';
 import { formatTimeSlot, sortActivitiesChronologically } from '../lib/timetableUtils';
+import { ConfirmDeleteModal } from './common/ConfirmDeleteModal';
 
 interface SemesterDashboardProps {
   initialDay?: AcademicDay | null;
@@ -28,6 +29,7 @@ export function SemesterDashboard({ initialDay, onSelectDay, onOpenAI }: Semeste
   const [selectedDay, setSelectedDay] = useState<AcademicDay | null>(initialDay || null);
   const [showSetup, setShowSetup] = useState(false);
   const [catTime, setCatTime] = useState<CATDateComponents>(getCATDateComponents());
+  const [showResetModal, setShowResetModal] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -61,15 +63,16 @@ export function SemesterDashboard({ initialDay, onSelectDay, onOpenAI }: Semeste
     setSelectedDay(null);
   };
 
-  const handleResetData = async () => {
-    if (window.confirm('Are you sure you want to delete all generated semester data from the Firestore database and start fresh?')) {
-      try {
-        await clearFirestoreDatabase();
-        window.location.reload();
-      } catch (e) {
-        console.error(e);
-        alert('Error clearing database');
-      }
+  const handleResetData = () => {
+    setShowResetModal(true);
+  };
+
+  const handleConfirmResetData = async () => {
+    try {
+      await clearFirestoreDatabase();
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -222,6 +225,22 @@ export function SemesterDashboard({ initialDay, onSelectDay, onOpenAI }: Semeste
           );
         })}
       </div>
+
+      {/* Reset Semester Data Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={showResetModal}
+        title="Reset Semester Data"
+        itemName="All Generated Semester & Timetable Data"
+        itemType="Data"
+        impactDetails={[
+          "Deletes generated semester weeks and timetable days",
+          "Clears scheduled timetable classes and sessions",
+          "Allows you to start fresh with the setup wizard"
+        ]}
+        confirmButtonText="Reset Everything"
+        onClose={() => setShowResetModal(false)}
+        onConfirm={handleConfirmResetData}
+      />
     </div>
   );
 }

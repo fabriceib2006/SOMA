@@ -4,6 +4,7 @@ import { addLectureMaterial, updateLectureStatus, saveTopic, uploadLectureFileTo
 import { auth } from '../../lib/firebase';
 import { getCATDateComponents } from '../../lib/catTime';
 import { Paperclip, File, X, RefreshCw, Trash2, UploadCloud, Sparkles, CheckCircle2, Loader2, Calendar, BookOpen, AlertCircle, FileText, Image as ImageIcon } from 'lucide-react';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export function LecturesTab({ module, lectures, onRefresh }: { module: LibraryModule; lectures: LectureMaterial[]; onRefresh: () => void }) {
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -20,6 +21,18 @@ export function LecturesTab({ module, lectures, onRefresh }: { module: LibraryMo
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [materialToDelete, setMaterialToDelete] = useState<LectureMaterial | null>(null);
+
+  const handleConfirmDeleteMaterial = async () => {
+    if (!materialToDelete) return;
+    try {
+      await deleteLectureMaterial(materialToDelete.id);
+      setMaterialToDelete(null);
+      onRefresh();
+    } catch (e) {
+      console.error('Failed to delete material:', e);
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -318,12 +331,9 @@ export function LecturesTab({ module, lectures, onRefresh }: { module: LibraryMo
                   </button>
                 )}
                 <button
-                  onClick={() => {
-                    if (confirm('Delete this material permanently from SOMA and Storage?')) {
-                      deleteLectureMaterial(lec.id).then(onRefresh);
-                    }
-                  }}
-                  className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                  type="button"
+                  onClick={() => setMaterialToDelete(lec)}
+                  className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all cursor-pointer"
                   title="Delete Material"
                   aria-label="Delete Material"
                 >
@@ -592,6 +602,22 @@ export function LecturesTab({ module, lectures, onRefresh }: { module: LibraryMo
           </div>
         </div>
       )}
+
+      {/* Delete Lecture Material Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!materialToDelete}
+        title="Delete Lecture Material"
+        itemName={materialToDelete?.title || ''}
+        itemType="Material"
+        impactDetails={[
+          "Permanently deletes this lecture file and notes from SOMA",
+          "Removes extracted AI topics associated with this lecture",
+          "Frees up cloud storage"
+        ]}
+        confirmButtonText="Delete Material"
+        onClose={() => setMaterialToDelete(null)}
+        onConfirm={handleConfirmDeleteMaterial}
+      />
     </div>
   );
 }

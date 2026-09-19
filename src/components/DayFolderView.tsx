@@ -8,6 +8,7 @@ import {
 } from '../lib/semesterFirestore';
 import { AcademicActivity } from '../types';
 import { createAssessment } from '../lib/assessmentFirestore';
+import { deleteActivityWithCascade } from '../lib/academicCascadeDelete';
 import { auth } from '../lib/firebase';
 import { 
   Sparkles, 
@@ -35,6 +36,7 @@ import { cleanTimeValues, formatTimeSlot, sortActivitiesChronologically } from '
 import { EditClassSlotModal } from './timetable/EditClassSlotModal';
 import { MoveClassSlotModal } from './timetable/MoveClassSlotModal';
 import { RemoveSlotConfirmModal } from './timetable/RemoveSlotConfirmModal';
+import { ConfirmDeleteModal } from './common/ConfirmDeleteModal';
 
 export function DayFolderView({ dayId, dayOfWeek, date, onOpenAI }: { dayId: string; dayOfWeek: string; date: string; onOpenAI?: (target?: any) => void }) {
   const { modules, days: allDays, weeks, activities: realtimeActivities } = useSOMA();
@@ -53,6 +55,7 @@ export function DayFolderView({ dayId, dayOfWeek, date, onOpenAI }: { dayId: str
   const [editingClassSlot, setEditingClassSlot] = useState<AcademicActivity | null>(null);
   const [movingClassSlot, setMovingClassSlot] = useState<AcademicActivity | null>(null);
   const [removingClassSlot, setRemovingClassSlot] = useState<AcademicActivity | null>(null);
+  const [activityToDelete, setActivityToDelete] = useState<AcademicActivity | null>(null);
 
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('12:00');
@@ -118,7 +121,7 @@ export function DayFolderView({ dayId, dayOfWeek, date, onOpenAI }: { dayId: str
     const { startTime: cleanStart, endTime: cleanEnd } = cleanTimeValues(startTime, endTime);
 
     // Add activity to day
-    await addFirestoreActivity({
+    const newAct = await addFirestoreActivity({
       dayId,
       title: newTitle.trim(),
       type: newType,
@@ -131,12 +134,18 @@ export function DayFolderView({ dayId, dayOfWeek, date, onOpenAI }: { dayId: str
     // If it is an assessment, quiz, cat, or exam, also register it in the academic assessments collection
     if (['assignment', 'quiz', 'cat', 'exam'].includes(newType)) {
       const userId = auth.currentUser?.uid || 'current_user';
-      await createAssessment(userId, {
+      const assessmentId = await createAssessment(userId, {
         moduleId: 'mod_' + (moduleName.trim() || 'general').toLowerCase().replace(/\s+/g, '_'),
+        moduleName: moduleName.trim() || undefined,
         title: newTitle.trim(),
         type: newType as any,
         dueDate: cleanDate,
+        dayId,
       });
+
+      if (newAct?.id && assessmentId) {
+        await updateFirestoreActivity(newAct.id, { assessmentId });
+      }
     }
 
     setNewTitle('');
@@ -152,9 +161,22 @@ export function DayFolderView({ dayId, dayOfWeek, date, onOpenAI }: { dayId: str
     loadActivities();
   };
 
-  const handleDelete = async (id: string) => {
-    await deleteFirestoreActivity(id);
-    loadActivities();
+  const handleDelete = (id: string) => {
+    const act = activities.find(a => a.id === id);
+    if (act) {
+      setActivityToDelete(act);
+    }
+  };
+
+  const handleConfirmDeleteActivity = async () => {
+    if (!activityToDelete) return;
+    try {
+      await deleteActivityWithCascade(activityToDelete.id, activityToDelete);
+      setActivityToDelete(null);
+      await loadActivities();
+    } catch (err) {
+      console.error('Failed to cascade delete activity:', err);
+    }
   };
 
   const handleConfirmRemoveSlot = async () => {
@@ -574,6 +596,39 @@ export function DayFolderView({ dayId, dayOfWeek, date, onOpenAI }: { dayId: str
         isOpen={!!removingClassSlot}
         onClose={() => setRemovingClassSlot(null)}
         onConfirm={handleConfirmRemoveSlot}
+      />
+
+      {/* Delete Activity / Assessment Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!activityToDelete}
+        title={
+          activityToDelete && ['assignment', 'quiz', 'cat', 'exam'].includes(activityToDelete.type)
+            ? 'Delete Assessment / Deadline'
+            : 'Delete Activity'
+        }
+        itemName={activityToDelete?.title || ''}
+        itemType={
+          activityToDelete && ['assignment', 'quiz', 'cat', 'exam'].includes(activityToDelete.type)
+            ? 'Assessment'
+            : 'Activity'
+        }
+        impactDetails={
+          activityToDelete && ['assignment', 'quiz', 'cat', 'exam'].includes(activityToDelete.type)
+            ? [
+                `Removes this assessment from ${dayOfWeek}'s schedule`,
+                'Removes it from Assessment Readiness and Progress',
+                'Removes it from the Home page Deadlines list',
+                'Deletes the synced Google Calendar event',
+                'Rebalances your daily study planner'
+              ]
+            : [
+                `Removes this entry from ${dayOfWeek}'s schedule`,
+                'Cleans up any associated calendar sync records'
+              ]
+        }
+        confirmButtonText="Delete"
+        onClose={() => setActivityToDelete(null)}
+        onConfirm={handleConfirmDeleteActivity}
       />
     </div>
   );

@@ -22,10 +22,13 @@ import {
   MoreVertical,
   Moon,
   Sparkles,
-  Download
+  Download,
+  Trash2
 } from 'lucide-react';
 import { auth } from '../lib/firebase';
 import { AcademicActivity, Semester, Week, AcademicDay, LectureMaterial, AcademicAssessment, LibraryModule } from '../types';
+import { deleteAssessmentWithCascade, cleanOrphanAssessments } from '../lib/academicCascadeDelete';
+import { safeParseDueDate } from '../lib/safeDateUtils';
 import { 
   getCATDateComponents, 
   normalizeToCATDateString, 
@@ -40,6 +43,7 @@ import { GeneratePlanButton } from './planner/GeneratePlanButton';
 import { ProactiveCoach } from './ProactiveCoach';
 import { PlannerCard } from './planner/PlannerCard';
 import { updateSessionStatus } from '../lib/plannerFirestore';
+import { ConfirmDeleteModal } from './common/ConfirmDeleteModal';
 import { useSOMA } from '../lib/realtime';
 import { GoogleCalendarConnect } from './GoogleCalendarConnect';
 import { UpcomingEvents } from './UpcomingEvents';
@@ -79,6 +83,10 @@ export function HomeDashboard({ user, onNavigateTab, onOpenDay, onOpenAI, onOpen
   const [parsingAI, setParsingAI] = useState(false);
   const [parseSuccessMsg, setParseSuccessMsg] = useState<string | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [assessmentToDelete, setAssessmentToDelete] = useState<AcademicAssessment | null>(null);
+  const [deletingAsmId, setDeletingAsmId] = useState<string | null>(null);
+  const [isCleaningOrphans, setIsCleaningOrphans] = useState(false);
+  const [orphanCleanMsg, setOrphanCleanMsg] = useState<string | null>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -146,7 +154,7 @@ export function HomeDashboard({ user, onNavigateTab, onOpenDay, onOpenAI, onOpen
           const { createAssessment } = await import('../lib/libraryFirestore');
           const { addFirestoreActivity } = await import('../lib/semesterFirestore');
 
-          await createAssessment({
+          const createdAsm = await createAssessment({
             moduleId: 'mod_' + (parsed.moduleName || 'general').toLowerCase().replace(/\s+/g, '_'),
             moduleName: parsed.moduleName || 'General',
             semesterId: semester.id,
@@ -166,7 +174,8 @@ export function HomeDashboard({ user, onNavigateTab, onOpenDay, onOpenAI, onOpen
               moduleName: parsed.moduleName,
               startTime: '',
               endTime: '',
-              status: 'Upcoming'
+              status: 'Upcoming',
+              assessmentId: createdAsm?.id
             });
           }
 
@@ -227,6 +236,43 @@ export function HomeDashboard({ user, onNavigateTab, onOpenDay, onOpenAI, onOpen
     type: 'study_session', 
     moduleName: classesList[0]?.moduleName || 'Academic Focus' 
   });
+
+  const handleDeleteDeadline = (asm: AcademicAssessment) => {
+    setAssessmentToDelete(asm);
+  };
+
+  const handleConfirmDeleteDeadline = async () => {
+    if (!assessmentToDelete) return;
+    try {
+      setDeletingAsmId(assessmentToDelete.id);
+      const title = assessmentToDelete.title;
+      await deleteAssessmentWithCascade(assessmentToDelete.id);
+      setAssessmentToDelete(null);
+      setOrphanCleanMsg(`✓ Successfully removed "${title}" from deadlines and timeline.`);
+      setTimeout(() => setOrphanCleanMsg(null), 5000);
+    } catch (e) {
+      console.error('Failed to delete deadline:', e);
+    } finally {
+      setDeletingAsmId(null);
+    }
+  };
+
+  const handleCleanOrphans = async () => {
+    try {
+      setIsCleaningOrphans(true);
+      const res = await cleanOrphanAssessments();
+      if (res.cleanedCount > 0) {
+        setOrphanCleanMsg(`Cleaned ${res.cleanedCount} orphan plan${res.cleanedCount > 1 ? 's' : ''}: ${res.cleanedTitles.join(', ')}`);
+      } else {
+        setOrphanCleanMsg('All deadlines are in sync with your timeline.');
+      }
+      setTimeout(() => setOrphanCleanMsg(null), 6000);
+    } catch (e) {
+      console.error('Clean orphans failed:', e);
+    } finally {
+      setIsCleaningOrphans(false);
+    }
+  };
 
   const handleStartSession = (session: AcademicActivity) => {
     if (onOpenAI) {
@@ -531,9 +577,28 @@ export function HomeDashboard({ user, onNavigateTab, onOpenDay, onOpenAI, onOpen
 
           <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="font-bold text-neutral-900 text-base">Deadlines</h3>
-              <span className="text-xs text-neutral-500">{upcomingAssessments.length}</span>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-neutral-900 text-base">Deadlines</h3>
+                <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-neutral-100 text-neutral-600">
+                  {upcomingAssessments.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCleanOrphans}
+                disabled={isCleaningOrphans}
+                className="text-[11px] text-purple-600 hover:text-purple-800 font-semibold underline disabled:opacity-50"
+                title="Scan and remove any phantom or orphan deadlines that do not exist on the academic timeline"
+              >
+                {isCleaningOrphans ? 'Syncing...' : 'Clean Orphans'}
+              </button>
             </div>
+
+            {orphanCleanMsg && (
+              <div className="p-2.5 bg-purple-50 border border-purple-200 rounded-xl text-[11px] text-purple-800 font-medium leading-relaxed">
+                {orphanCleanMsg}
+              </div>
+            )}
             
             <form onSubmit={handleQuickAddAssessment} className="space-y-2">
               <div className="relative">
@@ -552,15 +617,61 @@ export function HomeDashboard({ user, onNavigateTab, onOpenDay, onOpenAI, onOpen
             </form>
 
             <div className="space-y-2">
-              {upcomingAssessments.slice(0, 3).map(asm => (
-                <div key={asm.id} className="p-3 rounded-xl border bg-neutral-50/50 flex justify-between items-center">
-                  <div>
-                    <h5 className="font-bold text-neutral-900 text-xs">{asm.title}</h5>
-                    <span className="text-[10px] text-neutral-500">{asm.dueDate}</span>
-                  </div>
-                  <span className="text-[10px] font-bold uppercase text-red-600">{asm.type}</span>
-                </div>
-              ))}
+              {upcomingAssessments.length === 0 ? (
+                <p className="text-xs text-neutral-400 py-3 text-center italic">No upcoming deadlines.</p>
+              ) : (
+                upcomingAssessments.map(asm => {
+                  const parsed = safeParseDueDate(asm.dueDate);
+                  return (
+                    <div 
+                      key={asm.id} 
+                      className="p-3 rounded-xl border bg-neutral-50/50 flex justify-between items-center group hover:bg-white hover:border-neutral-300 transition-all"
+                    >
+                      <div className="flex-1 min-w-0 pr-2">
+                        <h5 className="font-bold text-neutral-900 text-xs truncate">{asm.title}</h5>
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span className="text-[10px] text-neutral-500 font-medium">
+                            {parsed.formattedDueDate}
+                          </span>
+                          {parsed.isValid && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded-full font-semibold bg-neutral-200/70 text-neutral-700">
+                              {parsed.daysRemaining === 0 ? 'Today' : `${parsed.daysRemaining}d away`}
+                            </span>
+                          )}
+                          {asm.moduleName && (
+                            <span className="text-[9px] text-neutral-400 truncate max-w-[120px]">
+                              • {asm.moduleName}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                          asm.type === 'exam' ? 'bg-red-50 text-red-600 border border-red-100' :
+                          asm.type === 'cat' ? 'bg-orange-50 text-orange-600 border border-orange-100' :
+                          asm.type === 'quiz' ? 'bg-purple-50 text-purple-600 border border-purple-100' :
+                          'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                        }`}>
+                          {asm.type}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteDeadline(asm);
+                          }}
+                          disabled={deletingAsmId === asm.id}
+                          title="Delete assessment (removes from timetable, progress, calendar and rebalances study plan)"
+                          className="p-1.5 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -571,6 +682,24 @@ export function HomeDashboard({ user, onNavigateTab, onOpenDay, onOpenAI, onOpen
           </div>
         </div>
       </div>
+
+      {/* Delete Deadline Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!assessmentToDelete}
+        title="Delete Deadline"
+        itemName={assessmentToDelete ? `${assessmentToDelete.title}${assessmentToDelete.moduleName ? ` (${assessmentToDelete.moduleName})` : ''}` : ''}
+        itemType="Deadline"
+        impactDetails={[
+          "Removes this deadline from your Home dashboard",
+          "Removes it from Progress & Assessment Readiness calculations",
+          "Clears the assessment entry from your Academic Timeline day folder",
+          "Removes the corresponding Google Calendar event & sync mappings",
+          "Rebalances your daily study planner"
+        ]}
+        confirmButtonText="Delete Deadline"
+        onClose={() => setAssessmentToDelete(null)}
+        onConfirm={handleConfirmDeleteDeadline}
+      />
     </div>
   );
 }

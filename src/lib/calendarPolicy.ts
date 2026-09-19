@@ -1,5 +1,6 @@
 import { AcademicActivity, AcademicAssessment } from '../types';
 import { syncSOMAEntityToGoogle, deleteSOMAEntityFromGoogle } from './calendarSync';
+import { safeParseDueDate } from './safeDateUtils';
 
 export type CalendarSyncMode = 'essential' | 'academic' | 'full';
 
@@ -66,8 +67,10 @@ export async function evaluateAndSyncAssessment(
   syncMode: CalendarSyncMode
 ) {
   // Assessments are ALWAYS eligible under Essential, Academic, and Full
-  const startDateTime = `${assessment.dueDate}T09:00:00`;
-  const endDateTime = `${assessment.dueDate}T10:00:00`;
+  const parsed = safeParseDueDate(assessment.dueDate);
+  const dateStr = parsed.isoDateString || assessment.dueDate;
+  const startDateTime = `${dateStr}T09:00:00`;
+  const endDateTime = `${dateStr}T10:00:00`;
 
   try {
     await syncSOMAEntityToGoogle(userId, assessment.id, 'assessment', {

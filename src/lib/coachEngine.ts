@@ -1,13 +1,14 @@
 import { AcademicContext } from './academicContext';
 import { Recommendation } from '../types';
+import { safeParseDueDate } from './safeDateUtils';
 
 export async function detectSignals(context: AcademicContext): Promise<Recommendation[]> {
   const recommendations: Recommendation[] = [];
 
   // 1. Check for Upcoming Assessments
   const upcomingAssessments = context.assessments.filter(a => {
-    const daysUntil = (new Date(a.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24);
-    return daysUntil >= 0 && daysUntil <= 7;
+    const parsed = safeParseDueDate(a.dueDate);
+    return parsed.isValid && parsed.daysRemaining >= 0 && parsed.daysRemaining <= 7;
   });
 
   for (const assessment of upcomingAssessments) {
