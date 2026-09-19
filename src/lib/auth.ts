@@ -33,6 +33,15 @@ export const initAuth = (
 
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
+      if (user.email !== 'fabriceib2006@gmail.com') {
+        await signOut(auth);
+        cachedAccessToken = null;
+        try {
+          sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+        } catch (e) {}
+        if (onAuthFailure) onAuthFailure();
+        return;
+      }
       if (onAuthSuccess) {
         onAuthSuccess(user, cachedAccessToken);
       }
@@ -51,6 +60,14 @@ export const initAuth = (
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   try {
     const result = await signInWithPopup(auth, provider);
+    
+    if (result.user.email !== 'fabriceib2006@gmail.com') {
+      await signOut(auth);
+      const error = new Error('Access denied: Unauthorized account.');
+      (error as any).code = 'auth/unauthorized-account';
+      throw error;
+    }
+
     const credential = GoogleAuthProvider.credentialFromResult(result);
     
     if (credential?.accessToken) {

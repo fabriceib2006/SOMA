@@ -20,6 +20,8 @@ export default function Login() {
         setErrorMessage(`Domain not authorized: Please add "${window.location.hostname}" to your Firebase Console under Authentication > Settings > Authorized Domains.`);
       } else if (error?.code === 'auth/popup-closed-by-user') {
         setErrorMessage('Sign-in cancelled. Please try again.');
+      } else if (error?.code === 'auth/unauthorized-account') {
+        setErrorMessage('Access denied: This system is strictly restricted to a single authorized account only.');
       } else {
         setErrorMessage(error?.message || 'Login failed. Please check your credentials and try again.');
       }
