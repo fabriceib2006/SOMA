@@ -66,6 +66,7 @@ export function AITutorDashboard({ user, initialTarget, onClearTarget }: AITutor
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
 
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const initialGreetingRef = useRef(false);
 
   // Live CAT tick
   useEffect(() => {
@@ -102,37 +103,21 @@ export function AITutorDashboard({ user, initialTarget, onClearTarget }: AITutor
       const msgsRef = collection(db, 'tutorMessages');
       const q = query(msgsRef, where('conversationId', '==', conv.id));
       
-      let initialGreetingSent = false;
       const unsubscribe = onSnapshot(q, async (snapshot) => {
         const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as TutorMessage)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
         setMessages(msgs);
         
-        if (msgs.length === 0 && !initialGreetingSent) {
-          initialGreetingSent = true;
+        if (msgs.length === 0 && !initialGreetingRef.current) {
+          initialGreetingRef.current = true;
           const studentName = user.displayName?.split(' ')[0] || 'Student';
           const greetingData = getCATGreeting(studentName, currentCat);
           
-          const criticalRisks = riskList.filter(r => r.riskLevel === 'CRITICAL');
-          const highRisks = riskList.filter(r => r.riskLevel === 'HIGH');
-          const weakList = allTopics.filter(t => t.masteryScore !== undefined && t.masteryScore < 60);
-
           // Initial greeting
           await saveTutorMessage({
             conversationId: conv.id,
             userId: currentUid,
             role: 'assistant',
-            content: `${greetingData.greeting}! I am SOMA AI, your Academic Mentor & Intelligence Partner. (Viewing Chat Folder for **${dateToUse}**)
-
-🕒 **Current Time (Central Africa Time)**: **${currentCat.shortTimeString} CAT**
-${currentCat.isDayEnded ? '🌙 **Night Rest Period Active**: Academic daytime concluded at 23:00 CAT so you can sleep and consolidate memories.' : '⚡ **Active Academic Period**: Academic daytime concludes at 23:00 CAT.'}
-
-📊 **Academic Intelligence Briefing (${dateToUse})**:
-- Active Semester: **${selectedSem.name}**
-- Upcoming Assessments: **${assessments.length} scheduled**
-- Academic Risk Status: **${criticalRisks.length > 0 ? 'CRITICAL' : (highRisks.length > 0 ? 'HIGH' : 'STABLE')}**
-${weakList.length > 0 ? `\n⚠️ **Topics Requiring Immediate Mastery**: ${weakList.slice(0, 3).map(t => `${t.name} (${t.masteryScore}%)`).join(', ')}` : ''}
-
-How can I help you master your curriculum for this day?`
+            content: `${greetingData.greeting}! I am SOMA AI, your Academic Mentor & Intelligence Partner. How can I help you master your curriculum for this day?`
           });
         }
       });
@@ -312,11 +297,7 @@ How can I help you master your curriculum for this day?`
         conversationId,
         userId: currentUid,
         role: 'assistant',
-        content: `🧹 **Chat History Cleared for ${selectedDate}**
-
-${greetingData.greeting}! All messages in this specific day's session have been cleaned. SOMA AI is ready with a fresh academic slate.
-
-How can I help you master your curriculum today?`
+        content: `🧹 **Chat History Cleared for ${selectedDate}**. How can I help you master your curriculum today?`
       });
 
       setFeedbackNotice(`Chat history for ${selectedDate} has been cleared.`);
@@ -424,13 +405,9 @@ How can I help you master your curriculum today?`
                 <span className="text-xs font-bold text-neutral-900">
                   {activeDayDisplay}
                 </span>
-                {isTodayActive ? (
+                {isTodayActive && (
                   <span className="text-[10px] uppercase tracking-wider font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
                     Active Today
-                  </span>
-                ) : (
-                  <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
-                    Archived Folder
                   </span>
                 )}
                 <span className="text-[11px] text-neutral-500 font-medium">

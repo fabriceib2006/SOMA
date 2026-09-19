@@ -193,7 +193,8 @@ export function SOMAProvider({ children }: { children: ReactNode }) {
     // Assessments
     const qAsm = query(collection(db, 'assessments'));
     unsubs.push(onSnapshot(qAsm, (snap) => {
-      setAssessments(snap.docs.map(d => ({ ...d.data(), id: d.id } as AcademicAssessment)));
+      const allAsms = snap.docs.map(d => ({ ...d.data(), id: d.id } as AcademicAssessment));
+      setAssessments(allAsms.filter(a => a.semesterId === activeSemester?.id));
     }));
     
     // External Calendar Events
