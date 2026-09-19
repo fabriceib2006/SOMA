@@ -57,15 +57,7 @@ function AppContent() {
   }
 
   if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-50 p-6">
-        <div className="w-full max-w-sm text-center">
-          <h1 className="text-4xl font-bold text-neutral-900 mb-2">SOMA</h1>
-          <p className="text-neutral-600 mb-8">Personal Academic Operating System</p>
-          <Login />
-        </div>
-      </div>
-    );
+    return <Login />;
   }
 
   const renderContent = () => {
