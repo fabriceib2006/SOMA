@@ -36,7 +36,7 @@ import { EditClassSlotModal } from './timetable/EditClassSlotModal';
 import { MoveClassSlotModal } from './timetable/MoveClassSlotModal';
 import { RemoveSlotConfirmModal } from './timetable/RemoveSlotConfirmModal';
 
-export function DayFolderView({ dayId, dayOfWeek, date }: { dayId: string; dayOfWeek: string; date: string }) {
+export function DayFolderView({ dayId, dayOfWeek, date, onOpenAI }: { dayId: string; dayOfWeek: string; date: string; onOpenAI?: (target?: any) => void }) {
   const { modules, days: allDays, weeks, activities: realtimeActivities } = useSOMA();
   const [activities, setActivities] = useState<AcademicActivity[]>([]);
   const [newTitle, setNewTitle] = useState('');
@@ -210,6 +210,34 @@ export function DayFolderView({ dayId, dayOfWeek, date }: { dayId: string; dayOf
             {activities.length} Items
           </span>
         </div>
+      </div>
+
+      {/* AI Tutor Chat Session for this Day */}
+      <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200 p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="p-1.5 bg-blue-600 text-white rounded-xl shadow-xs"><Sparkles size={18} /></span>
+            <h4 className="font-bold text-blue-900 text-base">SOMA AI Tutor Chat & Archives ({dayOfWeek})</h4>
+          </div>
+          <p className="text-xs text-blue-700 leading-relaxed">
+            Every day's Q&A, active recall drill, and AI guidance history is securely saved in this day folder. Review past chats or continue the conversation for {new Date(date).toLocaleDateString()}.
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            if (onOpenAI) {
+              onOpenAI({
+                dayId,
+                date,
+                prompt: `Let's review our study session and notes for ${dayOfWeek} (${date}).`
+              });
+            }
+          }}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs whitespace-nowrap transition-all flex items-center gap-2"
+        >
+          <span>Open Day AI Chat Session</span>
+          <Sparkles size={14} />
+        </button>
       </div>
 
       {/* CAT Day Status Notification Banner */}

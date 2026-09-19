@@ -33,12 +33,14 @@ export default function App() {
 function AppContent() {
   const [activeTab, setActiveTab] = useState('Home');
   const [tutorTarget, setTutorTarget] = useState<{ 
-    topic: string; 
-    module: string; 
+    topic?: string; 
+    module?: string; 
     prompt?: string;
     sessionId?: string;
     reason?: string;
     objective?: string;
+    dayId?: string;
+    date?: string;
   } | null>(null);
   const [targetDay, setTargetDay] = useState<any>(null);
   const [practiceTarget, setPracticeTarget] = useState<{ moduleId: string; topicId: string } | null>(null);

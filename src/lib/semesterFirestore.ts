@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { Semester, Week, AcademicDay, AcademicActivity } from '../types';
 import { cleanTimeValues } from './timetableUtils';
+import { cleanUndefined } from './firestoreUtils';
 
 export interface WeeklyModuleTemplate {
   dayOfWeek: string;
@@ -147,15 +148,15 @@ export const createSemesterHierarchyInFirestore = async (
   // Save to Firestore
   if (db) {
     const batch = writeBatch(db);
-    batch.set(doc(db, 'semesters', semesterId), { ...newSemester, startDate: startDate.toISOString() });
+    batch.set(doc(db, 'semesters', semesterId), cleanUndefined({ ...newSemester, startDate: startDate.toISOString() }));
     weeks.forEach(wk => {
-      batch.set(doc(db, 'weeks', wk.id), { ...wk, startDate: wk.startDate.toISOString(), endDate: wk.endDate.toISOString() });
+      batch.set(doc(db, 'weeks', wk.id), cleanUndefined({ ...wk, startDate: wk.startDate.toISOString(), endDate: wk.endDate.toISOString() }));
     });
     days.forEach(dy => {
-      batch.set(doc(db, 'days', dy.id), { ...dy, date: dy.date.toISOString() });
+      batch.set(doc(db, 'days', dy.id), cleanUndefined({ ...dy, date: dy.date.toISOString() }));
     });
     allActivities.forEach(act => {
-      batch.set(doc(db, 'activities', act.id), act);
+      batch.set(doc(db, 'activities', act.id), cleanUndefined(act));
     });
     await batch.commit();
   }
@@ -239,7 +240,7 @@ export const addFirestoreActivity = async (activity: Omit<AcademicActivity, 'id'
   const newActivity: AcademicActivity = { ...activity, id: actId, userId };
 
   if (db) {
-    await setDoc(doc(db, 'activities', actId), newActivity);
+    await setDoc(doc(db, 'activities', actId), cleanUndefined(newActivity));
   }
 
   return newActivity;
@@ -247,7 +248,7 @@ export const addFirestoreActivity = async (activity: Omit<AcademicActivity, 'id'
 
 export const updateFirestoreActivity = async (id: string, updates: Partial<AcademicActivity>): Promise<void> => {
   if (db) {
-    await setDoc(doc(db, 'activities', id), updates, { merge: true });
+    await setDoc(doc(db, 'activities', id), cleanUndefined(updates), { merge: true });
   }
 };
 

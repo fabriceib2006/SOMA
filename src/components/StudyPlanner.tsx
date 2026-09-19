@@ -94,7 +94,7 @@ export const StudyPlanner: React.FC<StudyPlannerProps> = ({ onOpenAI }) => {
             Switch to Daily Planner →
           </button>
         </div>
-        <SemesterDashboard initialDay={activeDay} onSelectDay={d => setActiveDay(d)} />
+        <SemesterDashboard initialDay={activeDay} onSelectDay={d => setActiveDay(d)} onOpenAI={onOpenAI} />
       </div>
     );
   }

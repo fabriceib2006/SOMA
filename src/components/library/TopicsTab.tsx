@@ -112,8 +112,8 @@ export function TopicsTab({ module, topics, onRefresh }: { module: LibraryModule
             </button>
           </div>
         ) : (
-          topics.map(t => (
-            <div key={t.id} className="bg-white p-4 sm:p-5 sm:p-6 rounded-2xl sm:rounded-3xl border border-neutral-200/80 shadow-xs space-y-3 sm:space-y-4 hover:border-blue-200 transition-all flex flex-col justify-between">
+          topics.map((t, index) => (
+            <div key={t.id || `top_${index}`} className="bg-white p-4 sm:p-5 sm:p-6 rounded-2xl sm:rounded-3xl border border-neutral-200/80 shadow-xs space-y-3 sm:space-y-4 hover:border-blue-200 transition-all flex flex-col justify-between">
               <div className="space-y-2">
                 <div className="flex justify-between items-start gap-3">
                   <div className="min-w-0 flex-1">

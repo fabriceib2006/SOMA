@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { LibraryModule, LectureMaterial, LibraryTopic, AcademicAssessment, LibraryExercise, ExerciseSubmission, PracticeDraft, MistakeRecord } from '../types';
+import { cleanUndefined } from './firestoreUtils';
 
 // Storage resumable upload helper
 export const uploadLectureFileToStorage = (
@@ -129,7 +130,7 @@ export const createLibraryModule = async (moduleData: Omit<LibraryModule, 'id' |
   };
 
   if (db) {
-    await setDoc(doc(db, 'modules', id), newModule);
+    await setDoc(doc(db, 'modules', id), cleanUndefined(newModule));
   }
 
   return newModule;
@@ -137,7 +138,7 @@ export const createLibraryModule = async (moduleData: Omit<LibraryModule, 'id' |
 
 export const updateLibraryModule = async (id: string, updates: Partial<LibraryModule>): Promise<void> => {
   if (db) {
-    await setDoc(doc(db, 'modules', id), { ...updates, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(doc(db, 'modules', id), cleanUndefined({ ...updates, updatedAt: new Date().toISOString() }), { merge: true });
   }
 };
 
@@ -176,7 +177,7 @@ export const addLectureMaterial = async (materialData: Omit<LectureMaterial, 'id
   };
 
   if (db) {
-    await setDoc(doc(db, 'materials', id), newMaterial);
+    await setDoc(doc(db, 'materials', id), cleanUndefined(newMaterial));
   }
 
   return newMaterial;
@@ -184,7 +185,7 @@ export const addLectureMaterial = async (materialData: Omit<LectureMaterial, 'id
 
 export const updateLectureStatus = async (id: string, processingStatus: LectureMaterial['processingStatus'], aiAnalysis?: any): Promise<void> => {
   if (db) {
-    await setDoc(doc(db, 'materials', id), { processingStatus, ...(aiAnalysis ? { aiAnalysis } : {}) }, { merge: true });
+    await setDoc(doc(db, 'materials', id), cleanUndefined({ processingStatus, ...(aiAnalysis ? { aiAnalysis } : {}) }), { merge: true });
   }
 };
 
@@ -230,7 +231,7 @@ export const saveTopic = async (topicData: Omit<LibraryTopic, 'id'>): Promise<Li
   const newTopic: LibraryTopic = { ...topicData, id, userId: userId || '' };
 
   if (db) {
-    await setDoc(doc(db, 'topics', id), newTopic);
+    await setDoc(doc(db, 'topics', id), cleanUndefined(newTopic));
   }
 
   return newTopic;
@@ -254,7 +255,7 @@ export const createAssessment = async (assessmentData: Omit<AcademicAssessment, 
   const newAssessment: AcademicAssessment = { ...assessmentData, id, userId };
 
   if (db) {
-    await setDoc(doc(db, 'assessments', id), newAssessment);
+    await setDoc(doc(db, 'assessments', id), cleanUndefined(newAssessment));
   }
 
   return newAssessment;
@@ -278,7 +279,7 @@ export const saveExercise = async (exerciseData: Omit<LibraryExercise, 'id'>): P
   const newEx: LibraryExercise = { ...exerciseData, id, userId: userId || '' };
 
   if (db) {
-    await setDoc(doc(db, 'exercises', id), newEx);
+    await setDoc(doc(db, 'exercises', id), cleanUndefined(newEx));
   }
   return newEx;
 };
@@ -306,7 +307,7 @@ export const saveSubmission = async (subData: Omit<ExerciseSubmission, 'id' | 's
   };
 
   if (db) {
-    await setDoc(doc(db, 'submissions', id), newSub);
+    await setDoc(doc(db, 'submissions', id), cleanUndefined(newSub));
   }
   return newSub;
 };
@@ -323,7 +324,7 @@ export const savePracticeDraft = async (draft: Omit<PracticeDraft, 'id' | 'lastS
   };
 
   if (db) {
-    await setDoc(doc(db, 'practice_drafts', id), newDraft);
+    await setDoc(doc(db, 'practice_drafts', id), cleanUndefined(newDraft));
   }
   return newDraft;
 };
@@ -360,7 +361,7 @@ export const saveMistakeRecord = async (mistake: Omit<MistakeRecord, 'id' | 'cre
   };
 
   if (db) {
-    await setDoc(doc(db, 'mistakes', id), record);
+    await setDoc(doc(db, 'mistakes', id), cleanUndefined(record));
   }
   return record;
 };

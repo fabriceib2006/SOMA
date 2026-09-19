@@ -255,8 +255,8 @@ export function LecturesTab({ module, lectures, onRefresh }: { module: LibraryMo
             </button>
           </div>
         ) : (
-          lectures.map(lec => (
-            <div key={lec.id} className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200/80 shadow-xs flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 hover:border-blue-200 transition-all">
+          lectures.map((lec, index) => (
+            <div key={lec.id || `lec_${index}`} className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200/80 shadow-xs flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 hover:border-blue-200 transition-all">
               <div className="space-y-1.5 min-w-0 flex-1 w-full">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] uppercase tracking-wider font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">

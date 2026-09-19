@@ -11,9 +11,10 @@ import { formatTimeSlot, sortActivitiesChronologically } from '../lib/timetableU
 interface SemesterDashboardProps {
   initialDay?: AcademicDay | null;
   onSelectDay?: (day: AcademicDay | null) => void;
+  onOpenAI?: (target?: any) => void;
 }
 
-export function SemesterDashboard({ initialDay, onSelectDay }: SemesterDashboardProps = {}) {
+export function SemesterDashboard({ initialDay, onSelectDay, onOpenAI }: SemesterDashboardProps = {}) {
   const {
     semesters,
     activeSemester: currentSem,
@@ -99,7 +100,7 @@ export function SemesterDashboard({ initialDay, onSelectDay }: SemesterDashboard
       <div className="space-y-6">
         <button onClick={() => setSelectedDay(null)} className="text-blue-600 font-medium">← Back to Week {selectedWeek?.weekNumber}</button>
         <div className="bg-white p-6 rounded-2xl shadow-sm border">
-          <DayFolderView dayId={selectedDay.id} dayOfWeek={selectedDay.dayOfWeek} date={selectedDay.date as any} />
+          <DayFolderView dayId={selectedDay.id} dayOfWeek={selectedDay.dayOfWeek} date={selectedDay.date as any} onOpenAI={onOpenAI} />
         </div>
       </div>
     );

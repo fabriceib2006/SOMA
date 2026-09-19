@@ -5,6 +5,7 @@ import { auth, db } from '../../lib/firebase';
 import { getCATDateComponents, normalizeToCATDateString } from '../../lib/catTime';
 import { collection, addDoc } from 'firebase/firestore';
 import { useSOMA } from '../../lib/realtime';
+import { cleanUndefined } from '../../lib/firestoreUtils';
 import { File, X, Sparkles, UploadCloud, Loader2, Award, Calendar, CheckSquare } from 'lucide-react';
 
 export function AssessmentsTab({ module, assessments, viewType, onRefresh }: { module: LibraryModule; assessments: AcademicAssessment[]; viewType: 'assignments' | 'cats'; onRefresh: () => void }) {
@@ -72,7 +73,7 @@ export function AssessmentsTab({ module, assessments, viewType, onRefresh }: { m
       const targetDay = days.find(d => normalizeToCATDateString(d.date) === dueDate);
       if (targetDay) {
         try {
-          await addDoc(collection(db, 'activities'), {
+          await addDoc(collection(db, 'activities'), cleanUndefined({
             dayId: targetDay.id,
             userId,
             semesterId: module.semesterId,
@@ -83,7 +84,7 @@ export function AssessmentsTab({ module, assessments, viewType, onRefresh }: { m
             moduleId: module.id,
             status: 'PENDING',
             durationMinutes: 60
-          });
+          }));
         } catch (err) {
           console.error(err);
         }
@@ -142,8 +143,8 @@ export function AssessmentsTab({ module, assessments, viewType, onRefresh }: { m
             </button>
           </div>
         ) : (
-          assessments.map(a => (
-            <div key={a.id} className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-blue-200 transition-all">
+          assessments.map((a, index) => (
+            <div key={a.id || `asm_${index}`} className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-blue-200 transition-all">
               <div className="space-y-1.5 min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`text-[11px] uppercase tracking-wider font-bold px-2.5 py-0.5 rounded-full border ${

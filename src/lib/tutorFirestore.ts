@@ -7,7 +7,8 @@ import {
   query, 
   where,
   orderBy,
-  getDoc
+  getDoc,
+  writeBatch
 } from 'firebase/firestore';
 
 export interface TutorMessage {
@@ -101,4 +102,27 @@ export const saveTutorMessage = async (msg: Omit<TutorMessage, 'id' | 'createdAt
   }
 
   return newMsg as TutorMessage;
+};
+
+export const clearDayConversationMessages = async (conversationId: string): Promise<number> => {
+  if (!db || !conversationId) return 0;
+  try {
+    const q = query(collection(db, 'tutorMessages'), where('conversationId', '==', conversationId));
+    const snap = await getDocs(q);
+    if (snap.empty) return 0;
+
+    const docs = snap.docs;
+    // Chunk deletions by 400 to remain safely under Firestore's 500 limit
+    for (let i = 0; i < docs.length; i += 400) {
+      const batch = writeBatch(db);
+      docs.slice(i, i + 400).forEach(docSnap => {
+        batch.delete(docSnap.ref);
+      });
+      await batch.commit();
+    }
+    return docs.length;
+  } catch (err) {
+    console.error('Failed to clear day conversation messages:', err);
+    throw err;
+  }
 };

@@ -68,6 +68,18 @@ How can I help you with your studies today?`
   }
 }
 
+function parseGeminiJSON(rawText: string) {
+  if (!rawText) throw new Error("Empty response from AI");
+  let cleaned = rawText.trim();
+  if (cleaned.startsWith("SOMA Academic Intelligence")) {
+    throw new Error(cleaned);
+  }
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+  }
+  return JSON.parse(cleaned);
+}
+
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -125,7 +137,7 @@ app.use((req, res, next) => {
         },
       });
       
-      res.json(JSON.parse(response.text!));
+      res.json(parseGeminiJSON(response.text!));
     } catch (err: any) {
       console.error("Error in /api/process-note:", err);
       const isQuota = err?.message?.includes('resource_exhausted') || err?.status === 429;
@@ -197,7 +209,7 @@ app.use((req, res, next) => {
         }
       });
       
-      res.json(JSON.parse(response.text!));
+      res.json(parseGeminiJSON(response.text!));
     } catch (err: any) {
       console.error("Error in /api/generate-plan:", err);
       const isQuota = err?.message?.includes('resource_exhausted') || err?.status === 429;
@@ -270,7 +282,7 @@ app.use((req, res, next) => {
         }
       });
 
-      res.json(JSON.parse(response.text!));
+      res.json(parseGeminiJSON(response.text!));
     } catch (err: any) {
       console.error("Error in /api/evaluate-practice:", err);
       res.status(500).json({ error: "SOMA AI evaluation failed. Check network or image quality." });
@@ -278,29 +290,34 @@ app.use((req, res, next) => {
   });
 
   app.post("/api/grade-answer", async (req, res) => {
-    const { question, answer } = req.body;
-    
-    const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
-      contents: `Grade this student answer for the following question. Provide a score (0-10), correct points, needs improvement points, and a recommendation.
-      Question: ${question}
-      Answer: ${answer}`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            score: { type: Type.NUMBER },
-            correct: { type: Type.ARRAY, items: { type: Type.STRING } },
-            needsImprovement: { type: Type.ARRAY, items: { type: Type.STRING } },
-            recommendation: { type: Type.STRING },
+    try {
+      const { question, answer } = req.body;
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-flash-latest",
+        contents: `Grade this student answer for the following question. Provide a score (0-10), correct points, needs improvement points, and a recommendation.
+        Question: ${question}
+        Answer: ${answer}`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              score: { type: Type.NUMBER },
+              correct: { type: Type.ARRAY, items: { type: Type.STRING } },
+              needsImprovement: { type: Type.ARRAY, items: { type: Type.STRING } },
+              recommendation: { type: Type.STRING },
+            },
+            required: ["score", "correct", "needsImprovement", "recommendation"]
           },
-          required: ["score", "correct", "needsImprovement", "recommendation"]
         },
-      },
-    });
-    
-    res.json(JSON.parse(response.text!));
+      });
+      
+      res.json(parseGeminiJSON(response.text!));
+    } catch (err: any) {
+      console.error("Error in /api/grade-answer:", err);
+      res.status(500).json({ error: "SOMA AI grading failed." });
+    }
   });
 
   app.post("/api/tutor-chat", async (req, res) => {
@@ -308,6 +325,7 @@ app.use((req, res, next) => {
       const { message, context, image, images } = req.body;
       const cat = getCATDateComponents();
       const catContext = getCATPromptContext(cat);
+      const contextStr = typeof context === 'string' ? context : (context ? JSON.stringify(context) : 'General context');
       
       let contents: any = `You are SOMA AI, the intelligence layer and expert academic mentor of SOMA.
       
@@ -322,13 +340,7 @@ app.use((req, res, next) => {
          - Advise the student to keep sessions brief and avoid sleep deprivation, as sleep is vital for neural consolidation.
       
       Student Academic Context:
-      - Active Semester: ${context?.semester || 'General Semester'}
-      - Modules Enrolled: ${JSON.stringify(context?.modules || [])}
-      - Weak Topics Requiring Focus (<60% mastery): ${JSON.stringify(context?.weakTopics || [])}
-      - Topic Mastery Profile: ${JSON.stringify(context?.masteryScores || {})}
-      - Upcoming Assessments: ${JSON.stringify(context?.assessments || [])}
-      - Recent Recorded Mistakes: ${JSON.stringify(context?.recentMistakes || [])}
-      - Timetable / Today's Reality: ${JSON.stringify(context?.todayActivities || [])}
+      ${contextStr}
       
       Student Message: ${message}
 
@@ -347,7 +359,10 @@ app.use((req, res, next) => {
           inlineData: { mimeType: "image/jpeg", data: img.split(',')[1] || img }
         }));
         contents = [
-          { text: `Analyze these ${images.length} ordered pages of student submission / handwritten exercise for the query: ${message}.
+          { text: `Student Academic Context:
+          ${contextStr}
+
+          Analyze these ${images.length} ordered pages of student submission / handwritten exercise for the query: ${message}.
           Current Time Context: ${cat.shortTimeString} CAT (${cat.dateString}).
           Review the pages in exact sequential order (Page 1 to Page ${images.length}).
           Grade it out of 10, detail strengths and errors across the pages. If applicable, include a machine-parseable JSON block between <<<GRADING_JSON and GRADING_JSON>>>:
@@ -362,7 +377,10 @@ app.use((req, res, next) => {
         ];
       } else if (image) {
         contents = [
-          { text: `Analyze this student submission / handwritten note for the query: ${message}.
+          { text: `Student Academic Context:
+          ${contextStr}
+
+          Analyze this student submission / handwritten note for the query: ${message}.
           Current Time Context: ${cat.shortTimeString} CAT (${cat.dateString}).
           Grade it out of 10, detail strengths and errors. If applicable, also include a machine-parseable JSON block between <<<GRADING_JSON and GRADING_JSON>>>:
           {
@@ -403,8 +421,11 @@ app.use((req, res, next) => {
       res.json({ reply, gradingResult });
     } catch (err: any) {
       console.error("Error in /api/tutor-chat:", err);
-      const msg = err?.message || "SOMA encountered an error communicating with Gemini AI.";
-      res.status(500).json({ reply: `⚠️ SOMA AI Error: ${msg}` });
+      const isQuota = err?.message?.includes('resource_exhausted') || err?.status === 429 || err?.message?.includes('quota') || err?.message?.includes('exceeded');
+      const msg = isQuota 
+        ? "Gemini API quota limit has been reached. SOMA is operating in local curriculum mode while your quota resets. You can continue reviewing notes, managing your schedule, and tracking your timetable!" 
+        : (err?.message || "SOMA encountered an error communicating with Gemini AI.");
+      res.json({ reply: `⚠️ SOMA AI Notice: ${msg}`, gradingResult: null });
     }
   });
 
@@ -436,7 +457,7 @@ app.use((req, res, next) => {
         }
       });
 
-      res.json(JSON.parse(response.text!));
+      res.json(parseGeminiJSON(response.text!));
     } catch (err: any) {
       console.error("Error in /api/generate-practice:", err);
       res.status(500).json({
@@ -498,7 +519,7 @@ app.use((req, res, next) => {
         }
       });
 
-      const parsed = JSON.parse(response.text!);
+      const parsed = parseGeminiJSON(response.text!);
       res.json({
         assessment: parsed,
         ...parsed,
@@ -577,7 +598,7 @@ app.use((req, res, next) => {
         }
       });
 
-      res.json(JSON.parse(response.text!));
+      res.json(parseGeminiJSON(response.text!));
     } catch (err: any) {
       console.error("Error generating progress insights:", err);
       res.status(500).json({ 
